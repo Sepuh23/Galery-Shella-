@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes, viewport-fit=cover">
+  <title>pinky memory · fix audio muter</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      font-family: 'Quicksand', sans-serif;
+      background: #ffe4ec;
+      color: #6b3e4f;
+      min-height: 100vh;
+      width: 100%;
+    }
+
+    .animal-bg {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: -1;
+      pointer-events: none;
+    }
+
+    .animal {
+      position: absolute;
+      font-size: 2.8rem;
+      opacity: 0.2;
+    }
+
+    .page {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      display: none;
+      background: rgba(255, 228, 236, 0.95);
+    }
+
+    .page.active {
+      display: block;
+    }
+
+    .page-content {
+      min-height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px 16px;
+    }
+
+    .card {
+      background: white;
+      width: 100%;
+      max-width: 400px;
+      padding: 40px 20px;
+      border-radius: 40px;
+      box-shadow: 0 8px 0 #ffb0c0, 0 10px 25px rgba(0,0,0,0.1);
+      text-align: center;
+      border: 2px solid #ff8da1;
+    }
+
+    h1 {
+      font-size: 1.8rem;
+      margin-bottom: 20px;
+      line-height: 1.4;
+    }
+
+    .btn {
+      background: white;
+      border: 2px solid #ff8da1;
+      color: #a14a63;
+      font-weight: 600;
+      font-size: 1.3rem;
+      padding: 12px 32px;
+      border-radius: 50px;
+      box-shadow: 0 5px 0 #ffb0c0;
+      margin: 8px;
+      min-width: 140px;
+      cursor: pointer;
+      transition: all 0.05s linear;
+    }
+
+    .btn:active {
+      transform: translateY(4px);
+      box-shadow: 0 1px 0 #ffb0c0;
+    }
+
+    .loader {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      margin: 20px 0;
+      min-height: 40px;
+    }
+
+    .dot {
+      width: 16px;
+      height: 16px;
+      background: #ff8da1;
+      border-radius: 50%;
+      animation: bounce 0.8s infinite alternate;
+    }
+
+    .dot:nth-child(2) { animation-delay: 0.2s; background: #ffa5b9; }
+    .dot:nth-child(3) { animation-delay: 0.4s; background: #ffbdd0; }
+
+    @keyframes bounce {
+      0% { transform: translateY(0); }
+      100% { transform: translateY(-15px); }
+    }
+
+    .typing {
+      font-size: 1.8rem;
+      font-weight: 700;
+      border-right: 3px solid #ff8da1;
+      white-space: nowrap;
+      overflow: hidden;
+      width: 0;
+      animation: typing 1.5s steps(20, end) forwards, blink 0.8s step-end infinite;
+      margin: 0 auto 20px;
+      display: inline-block;
+    }
+
+    @keyframes typing { to { width: 100%; } }
+    @keyframes blink { 50% { border-color: transparent; } }
+
+    .gallery-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+      width: 100%;
+      max-width: 500px;
+      margin: 20px auto;
+    }
+
+    .gallery-item {
+      aspect-ratio: 1/1;
+      background: #ffeef2;
+      border-radius: 24px;
+      padding: 8px;
+      box-shadow: 0 6px 0 #ffb0c0, 0 10px 20px rgba(255, 120, 140, 0.2);
+      cursor: pointer;
+      opacity: 0;
+      transform: scale(0.7) translateY(30px);
+      transition: opacity 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.2), 
+                  transform 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+      position: relative;
+    }
+
+    .frame-emoji {
+      position: absolute;
+      font-size: 1.8rem;
+      filter: drop-shadow(2px 4px 6px rgba(255, 80, 120, 0.3));
+      z-index: 2;
+      pointer-events: none;
+    }
+
+    .emoji-top-left { top: -5px; left: -5px; transform: rotate(-10deg); }
+    .emoji-top-right { top: -5px; right: -5px; transform: rotate(10deg); }
+    .emoji-bottom-left { bottom: -5px; left: -5px; transform: rotate(5deg); }
+    .emoji-bottom-right { bottom: -5px; right: -5px; transform: rotate(-5deg); }
+
+    .gallery-item.early-visible {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+    }
+
+    .gallery-item.visible {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+      animation: popBubble 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.2) forwards;
+    }
+
+    .gallery-item:not(.visible):not(.early-visible) {
+      opacity: 0;
+      transform: scale(0.7) translateY(30px);
+      transition: opacity 0.4s ease, transform 0.4s ease;
+    }
+
+    @keyframes popBubble {
+      0% { opacity: 0; transform: scale(0.5) translateY(40px); }
+      50% { transform: scale(1.1) translateY(-5px); }
+      100% { opacity: 1; transform: scale(1) translateY(0); }
+    }
+
+    .gallery-item img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      border-radius: 18px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .lightbox {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.9);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 3000;
+    }
+
+    .lightbox.active {
+      display: flex;
+    }
+
+    .lightbox img {
+      max-width: 90%;
+      max-height: 80%;
+      border-radius: 30px;
+      border: 4px solid white;
+    }
+
+    .lightbox-close {
+      position: absolute;
+      top: 30px;
+      right: 30px;
+      font-size: 3.5rem;
+      color: white;
+      cursor: pointer;
+    }
+
+    .progress {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 4px;
+      background: #ff4f75;
+      width: 0%;
+      z-index: 1000;
+    }
+
+    .hidden { display: none !important; }
+
+    .page-header {
+      font-size: 1.5rem;
+      background: white;
+      padding: 10px 25px;
+      border-radius: 40px;
+      box-shadow: 0 4px 0 #ffb0c0;
+      margin: 10px 0;
+      display: inline-block;
+    }
+
+    .gallery-wrapper {
+      width: 100%;
+      max-width: 500px;
+      margin: 0 auto;
+      padding: 0 16px 30px;
+    }
+
+    .big-emoji { font-size: 4rem; margin: 20px 0; }
+  </style>
+</head>
+<body>
+  <div class="progress" id="progressBar"></div>
+  <div class="animal-bg" id="animalBg"></div>
+
+  <div class="lightbox" id="lightbox" onclick="closeLightbox()">
+    <span class="lightbox-close" onclick="closeLightbox()">&times;</span>
+    <img id="lightboxImg" src="" alt="">
+  </div>
+
+  <!-- AUDIO - PASTIKAN FILE ADA DI FOLDER audio/ DENGAN NAMA lagu.mp3 -->
+  <audio id="bgAudio" loop preload="auto">
+    <source src="123.mp3" type="audio/mpeg">
+    <source src="audio/lagu.ogg" type="audio/ogg">
+    Browser kamu tidak support audio tag.
+  </audio>
+
+  <!-- HALAMAN 1 -->
+  <div class="page active" id="page1">
+    <div class="page-content">
+      <div class="card">
+        <h1>Halo kamu...<br>iya kamu 👀</h1>
+        <div style="font-size: 2.5rem; margin: 10px 0;">🐰🐱🐻</div>
+        <div class="loader" id="loader1"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+        <button class="btn" id="enterBtn" style="opacity: 0.5; transform: scale(0.9);" disabled>Masuk</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- HALAMAN 2 -->
+  <div class="page" id="page2">
+    <div class="page-content">
+      <div class="card">
+        <div class="typing" id="typingText">Kamu penasaran ya?</div>
+        <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin: 30px 0 20px;">
+          <button class="btn" id="yesBtn2">Iya</button>
+          <button class="btn" id="noBtn2">Tidak</button>
+        </div>
+        <div class="loader hidden" id="loader2"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- HALAMAN 2.5 -->
+  <div class="page" id="page2half">
+    <div class="page-content">
+      <div class="card">
+        <div class="big-emoji">🐰✨</div>
+        <h2>Sebelum lihat fotonya...</h2>
+        <p style="font-size: 1.2rem; margin: 20px 0;">Aku mau bilang makasih udah mau mampir ke sini 💕</p>
+        <div style="margin: 20px 0;"><button class="btn" id="readyBtn">Siap lihat foto!</button></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- HALAMAN 3 -->
+  <div class="page" id="page3">
+    <div class="page-content" style="justify-content: flex-start;">
+      <div class="page-header">🐰 10 Foto Shella Imutt </div>
+      <div class="gallery-wrapper"><div class="gallery-grid" id="gallery1"></div></div>
+      <button class="btn" id="toPage4" style="margin: 10px auto 30px;">Masih ada lagi...</button>
+    </div>
+  </div>
+
+  <!-- HALAMAN 4 -->
+  <div class="page" id="page4">
+    <div class="page-content" style="justify-content: flex-start;">
+      <div class="page-header">🐾 12 Foto orang Cantikk</div>
+      <div class="gallery-wrapper"><div class="gallery-grid" id="gallery2"></div></div>
+      <button class="btn" id="toPage5" style="margin: 10px auto 30px;">Lanjut</button>
+    </div>
+  </div>
+
+  <!-- HALAMAN 5 -->
+  <div class="page" id="page5">
+    <div class="page-content">
+      <div class="card">
+        <h1>Makasih ya udah lihat sampai akhir 🙌</h1>
+        <button class="btn" id="waBtn" style="margin: 20px 0;">Kirim Makasih</button>
+        <p id="easterEgg" style="font-size: 1.3rem; cursor: pointer;">🌸 klik 3x 🌸</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function() {
+      // ========== 🌟 GAMPANG GANTI FOTO DI SINI ==========
+      // Tulis langsung nama file foto kamu di sini!
+      
+      // FOTO UNTUK HALAMAN 3 (10 foto pertama)
+      const fotoHalaman3 = [
+        "images/1.jpg",
+        "images/2.jpg",
+        "images/3.jpg",
+        "images/4.jpg",
+        "images/5.jpg",
+        "images/6.jpg",
+        "images/7.jpg",
+        "images/8.jpg",
+        "images/9.jpg",
+        "images/10.jpg"
+      ];
+      
+      // FOTO UNTUK HALAMAN 4 (13 foto kedua)
+      const fotoHalaman4 = [
+        "images/11.jpg",
+        "images/12.jpg",
+        "images/13.jpg",
+        "images/14.jpg",
+        "images/15.jpg",
+        "images/16.jpg",
+        "images/17.jpg",
+        "images/18.jpg",
+        "images/19.jpg",
+        "images/20.jpg",
+        "images/21.jpg",
+        "images/22.jpg",
+         // Tambahin yang ke-13
+      ];
+      
+      // ===== NOMOR WHATSAPP (ganti dengan nomor kamu) =====
+      const NOMOR_WA = "6285950077731"; // GANTI INI
+      
+      // ===== SEMUA SETTINGAN DI BAWAH UDAH OTOMATIS, GA USAH DIEDIT =====
+      const emojiList = ['🌸','🌼','🐰','🐱','🐻','💕','✨','⭐','🦊','🐼','🐨','🦄','🌈','🍓','🍒','🌸','🌺','💖','🧸','🎀','🐝','🦋','🌷','🌹','🍰','🧁','🐣','🐥','😺','💗'];
+
+      // Background hewan
+      const animalBg = document.getElementById('animalBg');
+      const animals = ['🐰', '🐱', '🐻'];
+      for (let i = 0; i < 8; i++) {
+        const span = document.createElement('span');
+        span.className = 'animal';
+        span.textContent = animals[Math.floor(Math.random() * animals.length)];
+        span.style.left = Math.random() * 100 + '%';
+        span.style.top = Math.random() * 100 + '%';
+        animalBg.appendChild(span);
+      }
+
+      // ===== FIX AUDIO: PASTIKAN MUTER BUKAN DOWNLOAD =====
+      const audio = document.getElementById('bgAudio');
+      audio.volume = 0.7;
+      
+      // Penting: ini biar browser tahu ini audio buat diputer bukan didownload
+      audio.preload = 'auto';
+      
+      // Cek apakah audio bisa diputer
+      audio.addEventListener('error', function(e) {
+        console.log('Audio error:', e);
+        alert('File audio tidak ditemukan! Pastikan ada file "lagu.mp3" di folder "audio/"');
+      });
+
+      const pages = document.querySelectorAll('.page');
+      
+      function showPage(pageId) {
+        pages.forEach(p => p.classList.remove('active'));
+        document.getElementById(pageId).classList.add('active');
+        if (pageId === 'page3' || pageId === 'page4') {
+          setTimeout(() => {
+            showFirstFour(pageId);
+            observeItems();
+            updateProgress();
+          }, 200);
+        }
+      }
+
+      // Halaman 1
+      const loader1 = document.getElementById('loader1');
+      const enterBtn = document.getElementById('enterBtn');
+
+      setTimeout(() => {
+        if (loader1) loader1.style.display = 'none';
+        enterBtn.disabled = false;
+        enterBtn.style.opacity = '1';
+        enterBtn.style.transform = 'scale(1)';
+      }, 5000);
+
+      enterBtn.addEventListener('click', () => {
+        // Play audio dengan promise
+        audio.play()
+          .then(() => console.log('Audio berhasil diputar'))
+          .catch(e => {
+            console.log('Audio gagal otomatis, tapi nanti bisa lewat interaksi', e);
+            // Fallback: coba lagi setelah interaksi berikutnya
+          });
+        showPage('page2');
+      });
+
+      // Halaman 2
+      const yesBtn2 = document.getElementById('yesBtn2');
+      const noBtn2 = document.getElementById('noBtn2');
+      const loader2 = document.getElementById('loader2');
+
+      noBtn2.addEventListener('click', (e) => {
+        e.preventDefault();
+        alert('hihi nggak bisa klik Tidak! coba klik Iya 😝');
+      });
+
+      yesBtn2.addEventListener('click', () => showPage('page2half'));
+
+      // Halaman 2.5
+      const readyBtn = document.getElementById('readyBtn');
+      readyBtn.addEventListener('click', () => {
+        readyBtn.disabled = true;
+        readyBtn.textContent = 'Loading...';
+        setTimeout(() => {
+          showPage('page3');
+          readyBtn.disabled = false;
+          readyBtn.textContent = 'Siap lihat foto!';
+        }, 5000);
+      });
+
+      // Gallery
+      function createGallery(container, images) {
+        container.innerHTML = '';
+        images.forEach(src => {
+          const item = document.createElement('div');
+          item.className = 'gallery-item';
+          const img = document.createElement('img');
+          img.src = src;
+          img.loading = 'lazy';
+          item.appendChild(img);
+          
+          const numEmoji = Math.random() > 0.5 ? 2 : 1;
+          const positions = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
+          const selectedPositions = [];
+          for (let i = 0; i < numEmoji; i++) {
+            let pos;
+            do { pos = positions[Math.floor(Math.random() * positions.length)]; } 
+            while (selectedPositions.includes(pos));
+            selectedPositions.push(pos);
+            
+            const emoji = document.createElement('span');
+            emoji.className = `frame-emoji emoji-${pos}`;
+            emoji.textContent = emojiList[Math.floor(Math.random() * emojiList.length)];
+            item.appendChild(emoji);
+          }
+          
+          item.addEventListener('click', () => openLightbox(src));
+          container.appendChild(item);
+        });
+      }
+
+      createGallery(document.getElementById('gallery1'), fotoHalaman3);
+      createGallery(document.getElementById('gallery2'), fotoHalaman4);
+
+      function showFirstFour(pageId) {
+        const gallery = document.querySelector(`#${pageId} .gallery-grid`);
+        if (gallery) {
+          const items = gallery.querySelectorAll('.gallery-item');
+          items.forEach((item, index) => { if (index < 4) item.classList.add('early-visible'); });
+        }
+      }
+
+      const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) entry.target.classList.add('visible');
+          else entry.target.classList.remove('visible');
+        });
+      }, { threshold: 0.15 });
+
+      function observeItems() {
+        document.querySelectorAll('.gallery-item:not(.early-visible)').forEach(el => observer.observe(el));
+      }
+
+      window.openLightbox = (src) => {
+        document.getElementById('lightboxImg').src = src;
+        document.getElementById('lightbox').classList.add('active');
+      };
+
+      window.closeLightbox = () => {
+        document.getElementById('lightbox').classList.remove('active');
+      };
+
+      document.getElementById('toPage4').addEventListener('click', () => showPage('page4'));
+      document.getElementById('toPage5').addEventListener('click', () => showPage('page5'));
+
+      document.getElementById('waBtn').addEventListener('click', () => {
+        const pesan = encodeURIComponent('Makasih yaa udah bikinin kayak gini lucu banget 😆🔥');
+        window.open(`https://wa.me/${NOMOR_WA}?text=${pesan}`, '_blank');
+      });
+
+      function updateProgress() {
+        const activePage = document.querySelector('.page.active');
+        if (!activePage) return;
+        const scrollTop = activePage.scrollTop;
+        const scrollHeight = activePage.scrollHeight - activePage.clientHeight;
+        document.getElementById('progressBar').style.width = ((scrollTop / scrollHeight) * 100 || 0) + '%';
+      }
+      document.querySelectorAll('.page').forEach(page => page.addEventListener('scroll', updateProgress));
+
+      let eggCount = 0;
+      document.getElementById('easterEgg').addEventListener('click', () => {
+        eggCount++;
+        if (eggCount === 3) { alert('🐰 Haii cwekk Maniss kiww 🎉'); eggCount = 0; }
+      });
+
+      // ===== INTERAKSI UNTUK AUDIO =====
+      function playAudio() {
+        audio.play()
+          .then(() => {
+            console.log('Audio berhasil diputar');
+            document.body.removeEventListener('touchstart', playAudio);
+            document.body.removeEventListener('click', playAudio);
+          })
+          .catch(e => console.log('Audio belum bisa diputar', e));
+      }
+
+      document.body.addEventListener('touchstart', playAudio, { once: true });
+      document.body.addEventListener('click', playAudio, { once: true });
+      
+      // Backup: coba putar setelah 1 detik (kadang bisa kalo browser ijinin)
+      setTimeout(() => {
+        audio.play().catch(() => {});
+      }, 1000);
+      
+    })();
+  </script>
+</body>
+</html>
